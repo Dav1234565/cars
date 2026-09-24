@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multiverse Gallery</title>
+  <title>David Cohen Gallery</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background-color: #0d0d0d; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -14,20 +14,20 @@
       padding: 12px 20px; background-color: #121315; border-bottom: 1px solid #1f2124;
       position: sticky; top: 0; z-index: 100;
     }
-    .logo { font-size: 0.8rem; letter-spacing: 2px; font-weight: 600; color: #a0a5ab; text-transform: uppercase; }
-    .logo span { color: #60656c; font-weight: 400; }
+    .logo { font-size: 0.85rem; letter-spacing: 2px; font-weight: 600; color: #ffffff; text-transform: uppercase; }
     .nav-actions { display: flex; align-items: center; gap: 12px; }
 
     /* כפתורים */
-    .admin-btn, .upload-label {
+    .admin-btn, .upload-label, .clear-btn {
       background-color: #25282e; color: #d1d5db; padding: 6px 12px; border-radius: 4px;
       font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
       border: 1px solid #374151; transition: 0.2s; text-decoration: none;
     }
     .admin-btn:hover, .upload-label:hover { background-color: #374151; color: #ffffff; }
+    .clear-btn:hover { background-color: #7f1d1d; color: #ffffff; border-color: #991b1b; }
 
-    /* הסתרת כפתור ההעלה עד להזנת סיסמה */
-    #upload-container { display: none; }
+    /* הסתרת כפתורי ניהול עד להזנת סיסמה */
+    #admin-controls { display: none; gap: 8px; align-items: center; }
 
     /* הגלריה */
     .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
@@ -52,13 +52,14 @@
 <body>
 
   <header>
-    <div class="logo">Multiverse <span>by Pixelarity</span></div>
+    <div class="logo">DAVID COHEN GALLERY</div>
     
     <div class="nav-actions">
-      <!-- כפתור העלאה שנחשף רק לאדמין -->
-      <div id="upload-container">
+      <!-- כפתורי ניהול לאדמין -->
+      <div id="admin-controls">
         <label for="image-upload" class="upload-label">+ העלה תמונה</label>
         <input type="file" id="image-upload" accept="image/*" style="display:none;" multiple>
+        <button id="clear-all-btn" class="clear-btn">מחק הכל</button>
       </div>
 
       <!-- כפתור כניסה -->
@@ -69,47 +70,86 @@
   <main class="gallery" id="gallery"></main>
 
   <script>
-    // הסיסמה שלך - תוכל לשנות אותה כאן למשהו אחר
-    const ADMIN_PASSWORD = "david69808"; 
+    // הסיסמה שלך כאדמין
+    const ADMIN_PASSWORD = "1234"; 
 
     const loginBtn = document.getElementById('admin-login-btn');
-    const uploadContainer = document.getElementById('upload-container');
+    const adminControls = document.getElementById('admin-controls');
     const fileInput = document.getElementById('image-upload');
+    const clearBtn = document.getElementById('clear-all-btn');
     const gallery = document.getElementById('gallery');
 
-    // בדיקה בלחיצה על כפתור אדמין
+    // טעינת תמונות שמורות בטעינת הדף
+    window.addEventListener('DOMContentLoaded', loadSavedImages);
+
+    // התחברות אדמין
     loginBtn.addEventListener('click', () => {
       const pass = prompt("הכנס סיסמת אדמין:");
       if (pass === ADMIN_PASSWORD) {
-        alert(" התחברת בהצלחה כאדמין!");
-        uploadContainer.style.display = "inline-block";
+        alert("התחברת בהצלחה כאדמין!");
+        adminControls.style.display = "flex";
         loginBtn.style.display = "none";
       } else if (pass !== null) {
         alert("סיסמה שגויה!");
       }
     });
 
-    // טיפול בהעלאת תמונות
+    // העלאת תמונות ושמירתן ב-localStorage
     fileInput.addEventListener('change', (e) => {
       const files = e.target.files;
       if (!files.length) return;
+
+      const savedImages = JSON.parse(localStorage.getItem('my_gallery_images') || '[]');
 
       Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = (event) => {
           const caption = prompt(`כותרת לתמונה "${file.name}":`, "NEW IMAGE") || "UNTITLED";
+          const imageData = { url: event.target.result, caption: caption };
+
+          // שמירה במערך
+          savedImages.unshift(imageData);
           
-          const item = document.createElement('div');
-          item.className = 'gallery-item';
-          item.innerHTML = `
-            <img src="${event.target.result}" alt="${caption}">
-            <div class="caption">${caption}</div>
-          `;
-          gallery.insertBefore(item, gallery.firstChild);
+          try {
+            localStorage.setItem('my_gallery_images', JSON.stringify(savedImages));
+            renderImage(imageData, true);
+          } catch (err) {
+            alert("הזיכרון המקומי מלא. מומלץ להשתמש בתמונות קטנות יותר.");
+          }
         };
         reader.readAsDataURL(file);
       });
       fileInput.value = '';
+    });
+
+    // פונקציה להצגת תמונה על המסך
+    function renderImage(item, prepend = false) {
+      const div = document.createElement('div');
+      div.className = 'gallery-item';
+      div.innerHTML = `
+        <img src="${item.url}" alt="${item.caption}">
+        <div class="caption">${item.caption}</div>
+      `;
+      if (prepend) {
+        gallery.insertBefore(div, gallery.firstChild);
+      } else {
+        gallery.appendChild(div);
+      }
+    }
+
+    // טעינת התמונות השמורות
+    function loadSavedImages() {
+      const savedImages = JSON.parse(localStorage.getItem('my_gallery_images') || '[]');
+      gallery.innerHTML = '';
+      savedImages.forEach(item => renderImage(item));
+    }
+
+    // מחיקת כל התמונות (לאדמין בלבד)
+    clearBtn.addEventListener('click', () => {
+      if (confirm("האם אתה בטוח שברצונך למחוק את כל התמונות?")) {
+        localStorage.removeItem('my_gallery_images');
+        gallery.innerHTML = '';
+      }
     });
   </script>
 
