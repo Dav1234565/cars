@@ -94,30 +94,58 @@
       }
     });
 
-    // העלאת תמונות ושמירתן ב-localStorage
+    // פונקציה לכיווץ התמונה לגודל מתאים לפני שמירה
+    function compressImage(file, maxWidth, quality, callback) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // כיווץ לפורמט JPEG באיכות רצויה
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          callback(compressedDataUrl);
+        };
+      };
+    }
+
+    // העלאת תמונות, כיווץ ושמירה
     fileInput.addEventListener('change', (e) => {
       const files = e.target.files;
       if (!files.length) return;
 
-      const savedImages = JSON.parse(localStorage.getItem('my_gallery_images') || '[]');
-
       Array.from(files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const caption = prompt(`כותרת לתמונה "${file.name}":`, "NEW IMAGE") || "UNTITLED";
-          const imageData = { url: event.target.result, caption: caption };
+        const caption = prompt(`כותרת לתמונה "${file.name}":`, "NEW IMAGE") || "UNTITLED";
 
-          // שמירה במערך
+        // כיווץ התמונה לרוחב מקסימלי של 1000 פיקסלים ובאיכות 70%
+        compressImage(file, 1000, 0.7, (compressedUrl) => {
+          const savedImages = JSON.parse(localStorage.getItem('my_gallery_images') || '[]');
+          const imageData = { url: compressedUrl, caption: caption };
+
           savedImages.unshift(imageData);
-          
+
           try {
             localStorage.setItem('my_gallery_images', JSON.stringify(savedImages));
             renderImage(imageData, true);
           } catch (err) {
-            alert("הזיכרון המקומי מלא. מומלץ להשתמש בתמונות קטנות יותר.");
+            alert("הזיכרון המקומי עדיין מלא. נסה למחוק חלק מהתמונות בעזרת כפתור 'מחק הכל'.");
           }
-        };
-        reader.readAsDataURL(file);
+        });
       });
       fileInput.value = '';
     });
