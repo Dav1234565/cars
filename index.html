@@ -18,12 +18,13 @@
     .nav-actions { display: flex; align-items: center; gap: 12px; }
 
     /* כפתורים */
-    .admin-btn, .upload-label {
+    .admin-btn, .upload-label, .clear-btn {
       background-color: #25282e; color: #d1d5db; padding: 6px 12px; border-radius: 4px;
       font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
       border: 1px solid #374151; transition: 0.2s; text-decoration: none;
     }
     .admin-btn:hover, .upload-label:hover { background-color: #374151; color: #ffffff; }
+    .clear-btn:hover { background-color: #7f1d1d; color: #ffffff; border-color: #991b1b; }
 
     #admin-controls { display: none; gap: 8px; align-items: center; }
 
@@ -56,6 +57,7 @@
       <div id="admin-controls">
         <label for="image-upload" class="upload-label">+ העלה תמונה</label>
         <input type="file" id="image-upload" accept="image/*" style="display:none;" multiple>
+        <button id="clear-all-btn" class="clear-btn">מחק הכל</button>
       </div>
       <button id="admin-login-btn" class="admin-btn">כניסת אדמין</button>
     </div>
@@ -67,13 +69,16 @@
     // הגדרות Cloudinary שלך
     const CLOUD_NAME = "nwbkr2gq"; 
     const UPLOAD_PRESET = "carsssss"; 
-
     const ADMIN_PASSWORD = "1234"; 
 
     const loginBtn = document.getElementById('admin-login-btn');
     const adminControls = document.getElementById('admin-controls');
     const fileInput = document.getElementById('image-upload');
+    const clearBtn = document.getElementById('clear-all-btn');
     const gallery = document.getElementById('gallery');
+
+    // טעינת תמונות שנשמרו בעבר מיד בעת טעינת העמוד
+    window.addEventListener('DOMContentLoaded', loadSavedImages);
 
     loginBtn.addEventListener('click', () => {
       const pass = prompt("הכנס סיסמת אדמין:");
@@ -86,7 +91,7 @@
       }
     });
 
-    // העלאת תמונה בענן מול Cloudinary
+    // העלאת תמונה בענן מול Cloudinary ושמירה מקומית של הקישור
     fileInput.addEventListener('change', async (e) => {
       const files = e.target.files;
       if (!files.length) return;
@@ -97,7 +102,6 @@
         const formData = new FormData();
         formData.append('file', file);
         formData.append('upload_preset', UPLOAD_PRESET);
-        formData.append('context', `caption=${caption}`); // שמירת הכותרת כמידע נלווה
 
         try {
           const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
@@ -106,18 +110,28 @@
           });
 
           const data = await res.json();
-          if (data.secure_url) {
-            renderImage({ url: data.secure_url, caption: caption }, true);
+
+          if (res.ok && data.secure_url) {
+            const imageData = { url: data.secure_url, caption: caption };
+
+            // שמירת הקישור מהענן בזיכרון הדפדפן
+            const savedImages = JSON.parse(localStorage.getItem('cloud_gallery_images') || '[]');
+            savedImages.unshift(imageData);
+            localStorage.setItem('cloud_gallery_images', JSON.stringify(savedImages));
+
+            renderImage(imageData, true);
             alert("התמונה הועלתה בהצלחה לענן!");
+          } else {
+            // הקפצת הודעת השגיאה המדויקת מ-Cloudinary למקרה שמשהו מוגדר לא נכון
+            alert("שגיאה מ-Cloudinary: " + (data.error ? data.error.message : "העלאה נכשלה"));
           }
         } catch (err) {
-          alert("שגיאה בהעלאת התמונה: " + err.message);
+          alert("שגיאת תקשורת: " + err.message);
         }
       }
       fileInput.value = '';
     });
 
-    // הצגת תמונה בגלריה
     function renderImage(item, prepend = false) {
       const div = document.createElement('div');
       div.className = 'gallery-item';
@@ -131,6 +145,19 @@
         gallery.appendChild(div);
       }
     }
+
+    function loadSavedImages() {
+      const savedImages = JSON.parse(localStorage.getItem('cloud_gallery_images') || '[]');
+      gallery.innerHTML = '';
+      savedImages.forEach(item => renderImage(item));
+    }
+
+    clearBtn.addEventListener('click', () => {
+      if (confirm("האם למחוק את רשימת התמונות מהמסך?")) {
+        localStorage.removeItem('cloud_gallery_images');
+        gallery.innerHTML = '';
+      }
+    });
   </script>
 
 </body>
