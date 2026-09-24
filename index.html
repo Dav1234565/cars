@@ -18,13 +18,12 @@
     .nav-actions { display: flex; align-items: center; gap: 12px; }
 
     /* כפתורים */
-    .admin-btn, .upload-label, .clear-btn {
+    .admin-btn, .upload-label {
       background-color: #25282e; color: #d1d5db; padding: 6px 12px; border-radius: 4px;
       font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
       border: 1px solid #374151; transition: 0.2s; text-decoration: none;
     }
     .admin-btn:hover, .upload-label:hover { background-color: #374151; color: #ffffff; }
-    .clear-btn:hover { background-color: #7f1d1d; color: #ffffff; border-color: #991b1b; }
 
     #admin-controls { display: none; gap: 8px; align-items: center; }
 
@@ -57,7 +56,6 @@
       <div id="admin-controls">
         <label for="image-upload" class="upload-label">+ העלה תמונה</label>
         <input type="file" id="image-upload" accept="image/*" style="display:none;" multiple>
-        <button id="clear-all-btn" class="clear-btn">מחק הכל</button>
       </div>
       <button id="admin-login-btn" class="admin-btn">כניסת אדמין</button>
     </div>
@@ -66,19 +64,22 @@
   <main class="gallery" id="gallery"></main>
 
   <script>
-    // הגדרות Cloudinary שלך
     const CLOUD_NAME = "nwbkr2gq"; 
     const UPLOAD_PRESET = "carsssss"; 
     const ADMIN_PASSWORD = "1234"; 
 
+    // === רשימת התמונות הציבורית (שכל העולם יראה) ===
+    // תוכל להדביק כאן שורות חדשות שיתקבלו לאחר העלאה
+    const PUBLIC_IMAGES = [
+      // לדוגמה: { url: "https://res.cloudinary.com/...", caption: "FERRARI" },
+    ];
+
     const loginBtn = document.getElementById('admin-login-btn');
     const adminControls = document.getElementById('admin-controls');
     const fileInput = document.getElementById('image-upload');
-    const clearBtn = document.getElementById('clear-all-btn');
     const gallery = document.getElementById('gallery');
 
-    // טעינת תמונות שנשמרו בעבר מיד בעת טעינת העמוד
-    window.addEventListener('DOMContentLoaded', loadSavedImages);
+    window.addEventListener('DOMContentLoaded', loadGallery);
 
     loginBtn.addEventListener('click', () => {
       const pass = prompt("הכנס סיסמת אדמין:");
@@ -91,7 +92,37 @@
       }
     });
 
-    // העלאת תמונה בענן מול Cloudinary ושמירה מקומית של הקישור
+    // כיווץ התמונה לפני שליחה פותר את הגבלת הגודל
+    function compressImage(file, maxWidth, quality, callback) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            callback(blob);
+          }, 'image/jpeg', quality);
+        };
+      };
+    }
+
+    // העלאת תמונה
     fileInput.addEventListener('change', async (e) => {
       const files = e.target.files;
       if (!files.length) return;
@@ -99,35 +130,42 @@
       for (let file of files) {
         const caption = prompt(`כותרת לתמונה "${file.name}":`, "NEW IMAGE") || "UNTITLED";
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', UPLOAD_PRESET);
+        // מקטין את התמונה ל-1200 פיקסלים רוחב ובאיכות 75%
+        compressImage(file, 1200, 0.75, async (compressedBlob) => {
+          const formData = new FormData();
+          formData.append('file', compressedBlob, file.name);
+          formData.append('upload_preset', UPLOAD_PRESET);
 
-        try {
-          const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-            method: 'POST',
-            body: formData
-          });
+          try {
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+              method: 'POST',
+              body: formData
+            });
 
-          const data = await res.json();
+            const data = await res.json();
 
-          if (res.ok && data.secure_url) {
-            const imageData = { url: data.secure_url, caption: caption };
+            if (res.ok && data.secure_url) {
+              const item = { url: data.secure_url, caption: caption };
 
-            // שמירת הקישור מהענן בזיכרון הדפדפן
-            const savedImages = JSON.parse(localStorage.getItem('cloud_gallery_images') || '[]');
-            savedImages.unshift(imageData);
-            localStorage.setItem('cloud_gallery_images', JSON.stringify(savedImages));
+              // שמירה מקומית לבדיקה שלך
+              const saved = JSON.parse(localStorage.getItem('cloud_gallery_images') || '[]');
+              saved.unshift(item);
+              localStorage.setItem('cloud_gallery_images', JSON.stringify(saved));
 
-            renderImage(imageData, true);
-            alert("התמונה הועלתה בהצלחה לענן!");
-          } else {
-            // הקפצת הודעת השגיאה המדויקת מ-Cloudinary למקרה שמשהו מוגדר לא נכון
-            alert("שגיאה מ-Cloudinary: " + (data.error ? data.error.message : "העלאה נכשלה"));
+              renderImage(item, true);
+
+              // הודעה המציגה את הקוד להדבקה ב-GitHub בשביל שאר העולם
+              prompt(
+                "התמונה הועלתה בהצלחה! כדי שגם אנשים אחרים יראו אותה, העתק את השורה הבאה והדבק אותה בתוך המערך PUBLIC_IMAGES בקוד:",
+                `{ url: "${data.secure_url}", caption: "${caption}" },`
+              );
+            } else {
+              alert("שגיאה מ-Cloudinary: " + (data.error ? data.error.message : "העלאה נכשלה"));
+            }
+          } catch (err) {
+            alert("שגיאת תקשורת: " + err.message);
           }
-        } catch (err) {
-          alert("שגיאת תקשורת: " + err.message);
-        }
+        });
       }
       fileInput.value = '';
     });
@@ -146,18 +184,16 @@
       }
     }
 
-    function loadSavedImages() {
-      const savedImages = JSON.parse(localStorage.getItem('cloud_gallery_images') || '[]');
+    function loadGallery() {
       gallery.innerHTML = '';
-      savedImages.forEach(item => renderImage(item));
-    }
+      
+      // טעינת תמונות ציבוריות מהקוד
+      PUBLIC_IMAGES.forEach(item => renderImage(item));
 
-    clearBtn.addEventListener('click', () => {
-      if (confirm("האם למחוק את רשימת התמונות מהמסך?")) {
-        localStorage.removeItem('cloud_gallery_images');
-        gallery.innerHTML = '';
-      }
-    });
+      // טעינת תמונות שהעלית מקומית
+      const saved = JSON.parse(localStorage.getItem('cloud_gallery_images') || '[]');
+      saved.forEach(item => renderImage(item));
+    }
   </script>
 
 </body>
